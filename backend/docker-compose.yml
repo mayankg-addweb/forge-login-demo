@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: "3001"
+      NODE_ENV: production
+      SESSION_SECRET: ${SESSION_SECRET:-forge-login-demo-secret-please-rotate}
