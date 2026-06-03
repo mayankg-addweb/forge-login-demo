@@ -7,13 +7,26 @@ const PORT = Number(process.env.PORT || 3001)
 const SECRET = process.env.SESSION_SECRET || 'dev-secret'
 
 // ── DB ───────────────────────────────────────────────────────────────────
-// DO Managed PostgreSQL uses a self-signed cert chain; relax verification.
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('sslmode=')
-    ? { rejectUnauthorized: false }
-    : false,
-})
+// DO Managed PostgreSQL uses a private CA chain that isn't in Node's trust
+// store, so a plain `sslmode=require` connection fails with
+// SELF_SIGNED_CERT_IN_CHAIN. pg's URL parser also (loudly) treats
+// `sslmode=require` as alias for `verify-full`, which ignores any
+// `rejectUnauthorized: false` we pass in our Pool config. The fix:
+// strip the sslmode query param from the URL and apply our own ssl
+// config directly. Equivalent to libpq's old `sslmode=no-verify`.
+function buildPoolConfig() {
+  const raw = process.env.DATABASE_URL
+  if (!raw) throw new Error('DATABASE_URL not set')
+  const u = new URL(raw)
+  const hadSslMode = u.searchParams.has('sslmode')
+  u.searchParams.delete('sslmode')
+  return {
+    connectionString: u.toString(),
+    ssl: hadSslMode ? { rejectUnauthorized: false } : false,
+  }
+}
+
+const pool = new Pool(buildPoolConfig())
 
 // ── Password hashing (scrypt, built into Node, no native deps) ───────────
 function hashPassword(plain) {
